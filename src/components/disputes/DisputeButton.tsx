@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Flag } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -32,31 +32,43 @@ export function DisputeButton({
   size = 'sm'
 }: DisputeButtonProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isWithinTimeFrame, setIsWithinTimeFrame] = useState(false);
+  const [daysLeft, setDaysLeft] = useState(0);
   
-  // Calculate if we're still within the dispute window
-  const canFileDispute = () => {
-    const tenderEnd = new Date(tenderEndDate);
-    const disputeDeadline = new Date(tenderEnd);
-    disputeDeadline.setDate(disputeDeadline.getDate() + disputeTimeFrameDays);
+  useEffect(() => {
+    // Calculate if we're still within the dispute window
+    const canFileDispute = () => {
+      const tenderEnd = new Date(tenderEndDate);
+      const disputeDeadline = new Date(tenderEnd);
+      
+      // Use different timeframes based on dispute type
+      const days = disputeType === 'rejection' ? 3 : disputeTimeFrameDays;
+      disputeDeadline.setDate(disputeDeadline.getDate() + days);
+      
+      return new Date() <= disputeDeadline;
+    };
     
-    return new Date() <= disputeDeadline;
-  };
+    // Calculate days left for filing disputes
+    const getDaysLeft = () => {
+      const tenderEnd = new Date(tenderEndDate);
+      const disputeDeadline = new Date(tenderEnd);
+      
+      // Use different timeframes based on dispute type
+      const days = disputeType === 'rejection' ? 3 : disputeTimeFrameDays;
+      disputeDeadline.setDate(disputeDeadline.getDate() + days);
+      
+      const now = new Date();
+      const daysDiff = Math.ceil((disputeDeadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      return Math.max(0, daysDiff);
+    };
+    
+    setIsWithinTimeFrame(canFileDispute());
+    setDaysLeft(getDaysLeft());
+  }, [tenderEndDate, disputeTimeFrameDays, disputeType]);
   
-  const isWithinTimeFrame = canFileDispute();
-  
-  // Calculate days left for filing disputes
-  const getDaysLeft = () => {
-    const tenderEnd = new Date(tenderEndDate);
-    const disputeDeadline = new Date(tenderEnd);
-    disputeDeadline.setDate(disputeDeadline.getDate() + disputeTimeFrameDays);
-    
-    const now = new Date();
-    const daysDiff = Math.ceil((disputeDeadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
-    return Math.max(0, daysDiff);
-  };
-
   const buttonText = disputeType === 'winner' ? 'File Dispute' : 'Dispute Rejection';
+  const timeFrameDays = disputeType === 'rejection' ? 3 : disputeTimeFrameDays;
 
   return (
     <>
@@ -73,15 +85,15 @@ export function DisputeButton({
               >
                 <Flag className="h-4 w-4" />
                 {buttonText}
-                {isWithinTimeFrame && getDaysLeft() <= 3 && (
-                  <span className="text-xs text-red-500 font-medium">{getDaysLeft()} days left</span>
+                {isWithinTimeFrame && daysLeft <= 3 && (
+                  <span className="text-xs text-red-500 font-medium">{daysLeft} days left</span>
                 )}
               </Button>
             </span>
           </TooltipTrigger>
           {!isWithinTimeFrame && (
             <TooltipContent>
-              <p>The {disputeTimeFrameDays}-day window for filing {disputeType === 'winner' ? 'winner disputes' : 'rejection disputes'} has expired</p>
+              <p>The {timeFrameDays}-day window for filing {disputeType === 'winner' ? 'winner disputes' : 'rejection disputes'} has expired</p>
             </TooltipContent>
           )}
         </Tooltip>
@@ -96,7 +108,7 @@ export function DisputeButton({
             <DialogDescription>
               {isWithinTimeFrame ? (
                 <>
-                  You have {getDaysLeft()} days left to file a dispute 
+                  You have {daysLeft} days left to file a dispute 
                   {disputeType === 'winner' 
                     ? ' against the winner selection for this tender.' 
                     : ' against the rejection of your submission.'}
@@ -104,7 +116,7 @@ export function DisputeButton({
                 </>
               ) : (
                 <>
-                  The {disputeTimeFrameDays}-day window for filing disputes for this tender has expired.
+                  The {timeFrameDays}-day window for filing disputes for this tender has expired.
                 </>
               )}
             </DialogDescription>
@@ -116,8 +128,8 @@ export function DisputeButton({
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Important</AlertTitle>
                 <AlertDescription>
-                  Disputes must be filed within {disputeTimeFrameDays} days of the decision date.
-                  You have {getDaysLeft()} days remaining.
+                  Disputes must be filed within {timeFrameDays} days of the decision date.
+                  You have {daysLeft} days remaining.
                 </AlertDescription>
               </Alert>
               <DisputeForm

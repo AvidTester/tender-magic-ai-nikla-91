@@ -1,5 +1,7 @@
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { authAPI } from '@/services/api';
+import { toast } from '@/hooks/use-toast';
 
 // Define user roles
 export type UserRole = 'admin' | 'vendor' | 'evaluator';
@@ -25,75 +27,91 @@ interface AuthContextType {
 // Create the auth context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for demo purposes
-const MOCK_USERS: User[] = [
-  {
-    id: '1',
-    name: 'Admin User',
-    email: 'admin@example.com',
-    role: 'admin',
-    avatar: 'AU',
-  },
-  {
-    id: '2',
-    name: 'Vendor Company',
-    email: 'vendor@example.com',
-    role: 'vendor',
-    avatar: 'VC',
-  },
-  {
-    id: '3',
-    name: 'Evaluator One',
-    email: 'evaluator1@example.com',
-    role: 'evaluator',
-    avatar: 'EO',
-  },
-  {
-    id: '4',
-    name: 'Evaluator Two',
-    email: 'evaluator2@example.com',
-    role: 'evaluator',
-    avatar: 'ET',
-  }
-];
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Check for stored user on initial load
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    const checkUserSession = async () => {
+      setIsLoading(true);
+      
+      try {
+        const storedUser = localStorage.getItem('user');
+        const token = localStorage.getItem('token');
+        
+        if (storedUser && token) {
+          // Verify token is still valid with the backend
+          try {
+            const userData = await authAPI.getCurrentUser();
+            setUser(userData);
+          } catch (err) {
+            // Token is invalid or expired
+            localStorage.removeItem('user');
+            localStorage.removeItem('token');
+            setUser(null);
+          }
+        }
+      } catch (error) {
+        console.error('Authentication check error:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    checkUserSession();
   }, []);
 
-  // Mock login function - in a real app, this would validate against a backend
+  // Login function
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const foundUser = MOCK_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
-    
-    if (foundUser) {
-      setUser(foundUser);
-      localStorage.setItem('user', JSON.stringify(foundUser));
+    try {
+      const response = await authAPI.login(email, password);
+      
+      // Store user and token
+      setUser(response.user);
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      
+      toast({
+        title: "Login successful",
+        description: `Welcome back, ${response.user.name}!`,
+      });
+      
       setIsLoading(false);
       return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      toast({
+        title: "Login failed",
+        description: error instanceof Error ? error.message : "Invalid credentials",
+        variant: "destructive",
+      });
+      
+      setIsLoading(false);
+      return false;
     }
-    
-    setIsLoading(false);
-    return false;
   };
 
   // Logout function
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+    
+    // Remove user from state and storage
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    
+    toast({
+      title: "Logged out",
+      description: "You have been logged out successfully.",
+    });
   };
 
   return (
